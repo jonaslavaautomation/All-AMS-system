@@ -23,10 +23,9 @@ import {
   Zap,
 } from 'lucide-react';
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
 type Certificate = {
   id: string;
@@ -76,6 +75,10 @@ function App() {
 
   useEffect(() => {
     async function loadCertificates(): Promise<void> {
+      if (!supabase) {
+        setLoading(false);
+        return;
+      }
       const { data } = await supabase.from('coi_certificates').select('*').order('issued_date', { ascending: false });
       if (data && data.length > 0) setCertificates(data as Certificate[]);
       setLoading(false);
@@ -214,6 +217,11 @@ function CertificateModal({ customer, onClose, onSaved }: { customer: Customer |
     event.preventDefault();
     setSaving(true);
     const payload = { certificate_number: `CL${Math.floor(2672300000 + Math.random() * 99999)}`, insured_name: customer?.name || '', holder_name: form.holder, policy_number: form.policy || '02TRM068735-01', description: form.description || 'Certificate of liability insurance', issued_date: form.issuedDate, status: 'Issued' };
+    if (!supabase) {
+      onSaved({ ...payload, id: `local-${Date.now()}` });
+      setSaving(false);
+      return;
+    }
     const { data, error } = await supabase.from('coi_certificates').insert(payload).select().maybeSingle();
     if (!error && data) onSaved(data as Certificate);
     else if (error) onSaved({ ...payload, id: `local-${Date.now()}` });
