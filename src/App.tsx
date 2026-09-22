@@ -12,7 +12,6 @@ import {
   Files,
   Gauge,
   Link2,
-  Menu,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -20,7 +19,6 @@ import {
   Search,
   Settings,
   ShieldCheck,
-  UserRound,
   X,
   Zap,
 } from 'lucide-react';
