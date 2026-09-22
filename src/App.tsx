@@ -39,19 +39,98 @@ type Certificate = {
 };
 
 type Customer = {
+  id: string;
   name: string;
   address: string;
   city: string;
   state: string;
   zip: string;
   phone: string;
+  email: string;
+  customerType: 'Customer' | 'Prospect' | 'Suspect';
+  primaryExecutive: string;
+  primaryRepresentative: string;
 };
 
-const customers: Customer[] = [
-  { name: "YANA AND YOMI'S TRANSPORTATION INC", address: '3208 MAPLE LN', city: 'HAZEL CREST', state: 'IL', zip: '60429', phone: '(708) 362-0662' },
-  { name: "YANA AND YOMI'S TRANSPORTATION INC", address: '3208 MAPLE LN', city: 'HAZEL CREST', state: 'IL', zip: '60429', phone: '(708) 362-0662' },
-  { name: 'BROWN & BROWN INSURANCE SERVICES', address: '101 SOUTH MAIN ST', city: 'TALLAHASSEE', state: 'FL', zip: '32301', phone: '(850) 555-0148' },
+type CustomerRow = {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  phone: string;
+  email: string;
+  customer_type: string;
+  primary_executive: string;
+  primary_representative: string;
+};
+
+function mapDbCustomer(row: CustomerRow): Customer {
+  return {
+    id: row.id,
+    name: row.name,
+    address: row.address,
+    city: row.city,
+    state: row.state,
+    zip: row.zip,
+    phone: row.phone,
+    email: row.email,
+    customerType: (row.customer_type as Customer['customerType']) || 'Customer',
+    primaryExecutive: row.primary_executive,
+    primaryRepresentative: row.primary_representative,
+  };
+}
+
+const seedCustomers: Customer[] = [
+  { id: 'seed-1', name: "YANA AND YOMI'S TRANSPORTATION INC", address: '3208 MAPLE LN', city: 'HAZEL CREST', state: 'IL', zip: '60429', phone: '(708) 362-0662', email: 'yananndyomitransport@yahoo.com', customerType: 'Customer', primaryExecutive: 'Lynn Corrigan', primaryRepresentative: 'House Account' },
+  { id: 'seed-2', name: 'BROWN & BROWN INSURANCE SERVICES', address: '101 SOUTH MAIN ST', city: 'TALLAHASSEE', state: 'FL', zip: '32301', phone: '(850) 555-0148', email: '', customerType: 'Customer', primaryExecutive: 'Lynn Corrigan', primaryRepresentative: 'House Account' },
 ];
+
+type CustomerFormState = {
+  id?: string;
+  customerType: Customer['customerType'];
+  nameType: 'Business' | 'Individual';
+  firmName: string;
+  dba: string;
+  firstName: string;
+  lastName: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  phone: string;
+  email: string;
+  primaryExecutive: string;
+  primaryRepresentative: string;
+};
+
+function customerToFormState(customer: Customer): CustomerFormState {
+  return {
+    id: customer.id,
+    customerType: customer.customerType,
+    nameType: 'Business',
+    firmName: customer.name,
+    dba: '',
+    firstName: '',
+    lastName: '',
+    address: customer.address,
+    city: customer.city,
+    state: customer.state,
+    zip: customer.zip,
+    phone: customer.phone,
+    email: customer.email,
+    primaryExecutive: customer.primaryExecutive,
+    primaryRepresentative: customer.primaryRepresentative,
+  };
+}
+
+function buildCertificateNumber(issuedDate: string): string {
+  const [year, month, day] = issuedDate.split('-');
+  const stamp = `${(year || '26').slice(-2)}${month || '01'}${day || '01'}`;
+  const sequence = Math.floor(10000 + Math.random() * 90000);
+  return `CL${stamp}${sequence}`;
+}
 
 const sampleCertificates: Certificate[] = [
   { id: 'sample-1', certificate_number: 'CL2672337271', insured_name: "YANA AND YOMI'S TRANSPORTATION INC", holder_name: 'Master', policy_number: '02TRM068735-01', description: '2016 Freightliner, VIN #3ALACWDT1GDHG1434', issued_date: '2026-07-23', status: 'Issued' },
@@ -64,6 +143,7 @@ const navItems = ['Customer Overview', 'Policies', 'Activity', 'Claims', 'Aged A
 function App() {
   const [activeSection, setActiveSection] = useState('Customer Overview');
   const [search, setSearch] = useState('');
+  const [customers, setCustomers] = useState<Customer[]>(seedCustomers);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [certificates, setCertificates] = useState<Certificate[]>(sampleCertificates);
   const [loading, setLoading] = useState(true);
@@ -71,26 +151,32 @@ function App() {
   const [isEformsOpen, setIsEformsOpen] = useState(false);
   const [eformsTab, setEformsTab] = useState('All Forms');
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
-    async function loadCertificates(): Promise<void> {
+    async function loadData(): Promise<void> {
       if (!supabase) {
         setLoading(false);
         return;
       }
-      const { data } = await supabase.from('coi_certificates').select('*').order('issued_date', { ascending: false });
-      if (data && data.length > 0) setCertificates(data as Certificate[]);
+      const [certResult, customerResult] = await Promise.all([
+        supabase.from('coi_certificates').select('*').order('issued_date', { ascending: false }),
+        supabase.from('customers').select('*').order('created_at', { ascending: false }),
+      ]);
+      if (certResult.data && certResult.data.length > 0) setCertificates(certResult.data as Certificate[]);
+      if (customerResult.data && customerResult.data.length > 0) setCustomers((customerResult.data as CustomerRow[]).map(mapDbCustomer));
       setLoading(false);
     }
-    void loadCertificates();
+    void loadData();
   }, []);
 
   const matches = useMemo(() => {
     const normalized = search.trim().toLowerCase();
     if (!normalized) return [];
     return customers.filter((customer) => customer.name.toLowerCase().includes(normalized));
-  }, [search]);
+  }, [search, customers]);
 
   function notify(message: string): void {
     setToast(message);
@@ -112,6 +198,73 @@ function App() {
     notify('Certificate issued and added to the register');
   }
 
+  function openNewCustomer(): void {
+    setEditingCustomer(null);
+    setIsCustomerModalOpen(true);
+  }
+
+  function openEditCustomer(customer: Customer): void {
+    setEditingCustomer(customer);
+    setIsCustomerModalOpen(true);
+  }
+
+  async function handleCustomerSaved(form: CustomerFormState): Promise<void> {
+    const name = form.nameType === 'Business' ? form.firmName.trim() : `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+    const record = {
+      name,
+      address: form.address.trim(),
+      city: form.city.trim(),
+      state: form.state.trim().toUpperCase(),
+      zip: form.zip.trim(),
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      customer_type: form.customerType,
+      primary_executive: form.primaryExecutive.trim(),
+      primary_representative: form.primaryRepresentative.trim(),
+    };
+
+    if (form.id) {
+      const updated: Customer = { id: form.id, name, address: record.address, city: record.city, state: record.state, zip: record.zip, phone: record.phone, email: record.email, customerType: form.customerType, primaryExecutive: record.primary_executive, primaryRepresentative: record.primary_representative };
+      setCustomers((current) => current.map((customer) => (customer.id === form.id ? updated : customer)));
+      if (selectedCustomer?.id === form.id) setSelectedCustomer(updated);
+      if (supabase) await supabase.from('customers').update(record).eq('id', form.id);
+      setIsCustomerModalOpen(false);
+      setEditingCustomer(null);
+      notify('Customer updated');
+      return;
+    }
+
+    if (supabase) {
+      const { data, error } = await supabase.from('customers').insert(record).select().maybeSingle();
+      if (!error && data) {
+        const created = mapDbCustomer(data as CustomerRow);
+        setCustomers((current) => [created, ...current]);
+        setSelectedCustomer(created);
+        setActiveSection('Customer Overview');
+        setIsCustomerModalOpen(false);
+        notify('Customer created');
+        return;
+      }
+    }
+    const created: Customer = { id: `local-${Date.now()}`, name, address: record.address, city: record.city, state: record.state, zip: record.zip, phone: record.phone, email: record.email, customerType: form.customerType, primaryExecutive: record.primary_executive, primaryRepresentative: record.primary_representative };
+    setCustomers((current) => [created, ...current]);
+    setSelectedCustomer(created);
+    setActiveSection('Customer Overview');
+    setIsCustomerModalOpen(false);
+    notify('Customer created');
+  }
+
+  async function handleCustomerDeleted(customer: Customer): Promise<void> {
+    if (!window.confirm(`Delete customer "${customer.name}"? This cannot be undone.`)) return;
+    setCustomers((current) => current.filter((item) => item.id !== customer.id));
+    if (selectedCustomer?.id === customer.id) {
+      setSelectedCustomer(null);
+      setActiveSection('Customer Overview');
+    }
+    if (supabase) await supabase.from('customers').delete().eq('id', customer.id);
+    notify('Customer deleted');
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -128,7 +281,7 @@ function App() {
           <div className="sidebar-heading"><span>Views</span><button aria-label="Collapse sidebar"><ChevronLeft size={14} /></button></div>
           <div className="side-group">
             <div className="side-label"><Gauge size={13} /> Actions</div>
-            {['New Customer', 'Notes', 'Target List'].map((item) => <button className="side-item" key={item}>{item}</button>)}
+            {['New Customer', 'Notes', 'Target List'].map((item) => <button className="side-item" key={item} onClick={item === 'New Customer' ? openNewCustomer : undefined}>{item}</button>)}
             <button className="side-item quick"><Files size={13} /> Quick Reports</button>
           </div>
           <div className="side-group customer-nav">
@@ -140,9 +293,9 @@ function App() {
 
         <main className="main-area">
           <div className="breadcrumb"><span>Customer</span><ChevronRight size={12} /><strong>{selectedCustomer?.name || 'Customer Search'}</strong><ChevronRight size={12} /><em>{activeSection}</em></div>
-          {activeSection === 'Customer Overview' || !selectedCustomer ? <CustomerSearch search={search} setSearch={setSearch} matches={matches} selectedCustomer={selectedCustomer} onSubmit={handleCustomerSearch} onSelect={(customer) => { setSelectedCustomer(customer); setActiveSection('Certificates'); notify('Customer record loaded'); }} /> : (
+          {activeSection === 'Customer Overview' || !selectedCustomer ? <CustomerSearch search={search} setSearch={setSearch} matches={matches} selectedCustomer={selectedCustomer} onSubmit={handleCustomerSearch} onSelect={(customer) => { setSelectedCustomer(customer); setActiveSection('Certificates'); notify('Customer record loaded'); }} onNewCustomer={openNewCustomer} onEditCustomer={openEditCustomer} onDeleteCustomer={handleCustomerDeleted} /> : (
             <>
-              <div className="page-heading"><div><h1>{selectedCustomer.name} <span>— {activeSection}</span></h1><div className="summary"><span className="green-dot" /> <b>$0.00</b><span>|</span><span>00937120</span><span>|</span><span>Lynn Corrigan</span><span>|</span><span>House Account</span></div></div><div className="heading-actions"><button><ShieldCheck size={15} /> Additional Customer Info</button><button><Pencil size={14} /> Edit Customer</button><CircleHelp size={16} /></div></div>
+              <div className="page-heading"><div><h1>{selectedCustomer.name} <span>— {activeSection}</span></h1><div className="summary"><span className="green-dot" /> <b>$0.00</b><span>|</span><span>{selectedCustomer.customerType}</span><span>|</span><span>{selectedCustomer.primaryExecutive || 'Unassigned'}</span><span>|</span><span>{selectedCustomer.primaryRepresentative || 'Unassigned'}</span></div></div><div className="heading-actions"><button><ShieldCheck size={15} /> Additional Customer Info</button><button onClick={() => openEditCustomer(selectedCustomer)}><Pencil size={14} /> Edit Customer</button><CircleHelp size={16} /></div></div>
               <div className="content-card">
                 <div className="viewbar"><button className="collapse"><ChevronDown size={14} /> View Options</button><div className="view-select"><span>Select View:</span><select defaultValue="System Default"><option>System Default</option><option>My Certificate View</option></select><button>Apply View</button></div></div>
                 {activeSection === 'Policies' ? <Policies /> : activeSection === 'Certificates' ? <CertificateRegister certificates={certificates} loading={loading} onNew={() => { setEformsTab('Certificates'); setIsEformsOpen(true); }} onSelect={setSelectedCertificate} /> : <PlaceholderSection section={activeSection} onCertificates={() => setActiveSection('Certificates')} />}
@@ -155,14 +308,17 @@ function App() {
 
       {isEformsOpen && <EformsManager customer={selectedCustomer} tab={eformsTab} onTabChange={setEformsTab} onClose={() => setIsEformsOpen(false)} onNewCertificate={() => setIsModalOpen(true)} />}
       {isModalOpen && <CertificateModal customer={selectedCustomer} onClose={() => setIsModalOpen(false)} onSaved={handleCertificateSaved} />}
+      {isCustomerModalOpen && <CustomerModal initial={editingCustomer} onClose={() => { setIsCustomerModalOpen(false); setEditingCustomer(null); }} onSaved={handleCustomerSaved} />}
       {selectedCertificate && <CertificateDetail certificate={selectedCertificate} onClose={() => setSelectedCertificate(null)} onPrint={() => notify('Certificate is ready to print')} />}
       {toast && <div className="toast"><ShieldCheck size={17} /> {toast}</div>}
     </div>
   );
 }
 
-function CustomerSearch({ search, setSearch, matches, selectedCustomer, onSubmit, onSelect }: { search: string; setSearch: (value: string) => void; matches: Customer[]; selectedCustomer: Customer | null; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onSelect: (customer: Customer) => void }) {
-  return <div className="customer-screen"><div className="customer-screen-title"><strong>Customer</strong><span>Brown & Brown Insurance Services, Inc. · 303032-1</span><CircleHelp size={14} /></div><form className="customer-controls" onSubmit={onSubmit}><div className="customer-search-input"><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search customer" /><button type="submit" aria-label="Search"><Search size={16} /></button></div><span>Pick:</span><select aria-label="Pick result"><option>1</option><option>2</option></select><div className="search-rules">Search By: <b>Name</b> &nbsp;|&nbsp; Include: All &nbsp;|&nbsp; Agency, Broker &nbsp;|&nbsp; Customer Type: Customers</div></form><div className="customer-viewbar"><button><ChevronDown size={13} /> View Options</button><div><span>Select View:</span><select defaultValue="User Default"><option>User Default</option><option>System Default</option></select><button className="apply">Apply View</button></div></div><div className="customer-grid"><div className="grid-actions"><button><Plus size={14} /> New Customer</button><button disabled>Edit</button><button disabled>Open</button><button disabled>Delete</button></div><table><thead><tr><th>#</th><th>Match</th><th>Name</th><th>Address</th><th>City</th><th>State</th><th>Zip</th><th>Phone List</th><th>Primary Exec.</th><th>Primary Rep(s)</th><th>Account</th><th>Customer Type</th><th>Master</th><th>Business Unit</th><th>Business with Agency</th></tr></thead><tbody>{matches.map((customer, index) => <tr key={`${customer.name}-${index}`} className={selectedCustomer?.name === customer.name ? 'row-selected' : ''} onClick={() => onSelect(customer)}><td>{index + 1}</td><td>{customer.name}</td><td className="link">{customer.name}</td><td>{customer.address}</td><td>{customer.city}</td><td>{customer.state}</td><td>{customer.zip}</td><td>{customer.phone}</td><td>Lynn Corrigan</td><td>House Account</td><td>00937120</td><td>Customer</td><td>Standard</td><td>Columbia</td><td>Commercial</td></tr>)}</tbody></table><div className="customer-grid-footer"><span><ChevronLeft size={13} /> <ChevronLeft size={13} /> <b>1</b> <ChevronRight size={13} /> <ChevronRight size={13} /></span><span>{matches.length ? `Displaying record(s) 1 - ${matches.length} of ${matches.length}` : 'No records to display'}</span></div></div></div>;
+function CustomerSearch({ search, setSearch, matches, selectedCustomer, onSubmit, onSelect, onNewCustomer, onEditCustomer, onDeleteCustomer }: { search: string; setSearch: (value: string) => void; matches: Customer[]; selectedCustomer: Customer | null; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onSelect: (customer: Customer) => void; onNewCustomer: () => void; onEditCustomer: (customer: Customer) => void; onDeleteCustomer: (customer: Customer) => void }) {
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const picked = matches.find((customer) => customer.id === pickedId) || null;
+  return <div className="customer-screen"><div className="customer-screen-title"><strong>Customer</strong><span>Brown & Brown Insurance Services, Inc. · 303032-1</span><CircleHelp size={14} /></div><form className="customer-controls" onSubmit={onSubmit}><div className="customer-search-input"><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search customer" /><button type="submit" aria-label="Search"><Search size={16} /></button></div><span>Pick:</span><select aria-label="Pick result"><option>1</option><option>2</option></select><div className="search-rules">Search By: <b>Name</b> &nbsp;|&nbsp; Include: All &nbsp;|&nbsp; Agency, Broker &nbsp;|&nbsp; Customer Type: Customers</div></form><div className="customer-viewbar"><button><ChevronDown size={13} /> View Options</button><div><span>Select View:</span><select defaultValue="User Default"><option>User Default</option><option>System Default</option></select><button className="apply">Apply View</button></div></div><div className="customer-grid"><div className="grid-actions"><button onClick={onNewCustomer}><Plus size={14} /> New Customer</button><button disabled={!picked} onClick={() => picked && onEditCustomer(picked)}>Edit</button><button disabled={!picked} onClick={() => picked && onSelect(picked)}>Open</button><button disabled={!picked} onClick={() => picked && onDeleteCustomer(picked)}>Delete</button></div><table><thead><tr><th>#</th><th>Match</th><th>Name</th><th>Address</th><th>City</th><th>State</th><th>Zip</th><th>Phone List</th><th>Primary Exec.</th><th>Primary Rep(s)</th><th>Account</th><th>Customer Type</th><th>Master</th><th>Business Unit</th><th>Business with Agency</th></tr></thead><tbody>{matches.map((customer, index) => <tr key={customer.id} className={selectedCustomer?.id === customer.id || pickedId === customer.id ? 'row-selected' : ''} onClick={() => setPickedId(customer.id)} onDoubleClick={() => onSelect(customer)}><td>{index + 1}</td><td>{customer.name}</td><td className="link" onClick={(event) => { event.stopPropagation(); onSelect(customer); }}>{customer.name}</td><td>{customer.address}</td><td>{customer.city}</td><td>{customer.state}</td><td>{customer.zip}</td><td>{customer.phone}</td><td>{customer.primaryExecutive || 'Unassigned'}</td><td>{customer.primaryRepresentative || 'Unassigned'}</td><td>00937120</td><td>{customer.customerType}</td><td>Standard</td><td>Columbia</td><td>Commercial</td></tr>)}</tbody></table><div className="customer-grid-footer"><span><ChevronLeft size={13} /> <ChevronLeft size={13} /> <b>1</b> <ChevronRight size={13} /> <ChevronRight size={13} /></span><span>{matches.length ? `Displaying record(s) 1 - ${matches.length} of ${matches.length}` : 'No records to display'}</span></div></div></div>;
 }
 
 function Policies() {
@@ -209,14 +365,15 @@ function EformsManager({ customer, tab, onTabChange, onClose, onNewCertificate }
 function CertificateModal({ customer, onClose, onSaved }: { customer: Customer | null; onClose: () => void; onSaved: (certificate: Certificate) => void }) {
   const [form, setForm] = useState({ holder: 'Master', description: '', policy: '', issuedDate: '2026-07-27', namedInsured: '' });
   const [saving, setSaving] = useState(false);
+  const [certificateNumber] = useState(() => buildCertificateNumber('2026-07-27'));
   const isInsuredSelected = form.namedInsured.length > 0;
   function selectInsured(value: string): void {
-    setForm({ ...form, namedInsured: value, policy: value ? '02TRM068735-01' : '', description: value ? '2016 Freightliner, VIN #3ALACWDT1GDHG1434' : '' });
+    setForm({ ...form, namedInsured: value, policy: value ? '02TRM068735-01' : '', description: value ? `Certificate of liability insurance for ${customer?.name || 'insured'}` : '' });
   }
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setSaving(true);
-    const payload = { certificate_number: `CL${Math.floor(2672300000 + Math.random() * 99999)}`, insured_name: customer?.name || '', holder_name: form.holder, policy_number: form.policy || '02TRM068735-01', description: form.description || 'Certificate of liability insurance', issued_date: form.issuedDate, status: 'Issued' };
+    const payload = { certificate_number: certificateNumber, insured_name: customer?.name || '', holder_name: form.holder, policy_number: form.policy || '02TRM068735-01', description: form.description || 'Certificate of liability insurance', issued_date: form.issuedDate, status: 'Issued' };
     if (!supabase) {
       onSaved({ ...payload, id: `local-${Date.now()}` });
       setSaving(false);
@@ -227,9 +384,67 @@ function CertificateModal({ customer, onClose, onSaved }: { customer: Customer |
     else if (error) onSaved({ ...payload, id: `local-${Date.now()}` });
     setSaving(false);
   }
-  return <div className="form-backdrop"><section className="legacy-form-window"><div className="legacy-titlebar"><span>eForms - {customer?.name || 'Customer'}</span><div><button>—</button><button>□</button><button onClick={onClose} aria-label="Close"><X size={14} /></button></div></div><div className="legacy-menu"><span>File</span><span>Edit</span><span>eForms</span><span>View</span><span>Operation</span><span>Toolbox</span><span>Help</span></div><div className="legacy-iconbar"><span>◧</span><span>▣</span><span>▱</span><span>▾</span><span>✎</span><span>▤</span><span>◉</span><span>↔</span><span>＋</span><span>−</span><span>◀</span><span>▶</span></div><form onSubmit={submit}><div className="legacy-heading"><b>Certificate of Liability</b><div><button className="legacy-create" disabled={!isInsuredSelected || saving} type="submit">{saving ? 'Saving...' : 'Create'}</button><button type="button" onClick={onClose}>Cancel</button></div></div><p className="legacy-instruction">Select which form you wish to create, as well as appropriate policies &amp; types of insurance.</p><div className="legacy-form-body"><div className="legacy-left"><fieldset><legend>Form Selection Filters</legend><label>Form: <select><option>Certificate of Liability Insurance, 25, 12/2025</option></select></label></fieldset><div className="legacy-cert-fields"><label>Certificate #: <input value={isInsuredSelected ? 'CL2672379233' : ''} readOnly /></label><label className="assign"><input type="checkbox" defaultChecked /> Assign Number</label><label>Description: <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label></div><div className="legacy-row"><label><input type="checkbox" /> Show to Insured</label><label>Issue Date: <input type="date" value={form.issuedDate} onChange={(event) => setForm({ ...form, issuedDate: event.target.value })} /></label></div><fieldset className="insurance-fieldset"><legend>Type of Insurance</legend><div className="insurance-head"><span>Policy #</span><span>Get detail<br />based on:</span></div>{['General Liability:', 'Automobile:', 'Cargo:', 'Trailer Interchange:', 'Work Comp/Emp Liability:', 'Garage Liability:', 'Garage Keepers Liability:', 'Umbrella/Excess Liability:', 'Other:'].map((type, index) => <label className={index > 1 && index < 7 ? 'disabled-row' : ''} key={type}>{type}<select value={index < 2 && isInsuredSelected ? '02TRM068735-01' : ''} onChange={(event) => setForm({ ...form, policy: event.target.value })}><option value=""> </option><option>02TRM068735-01</option></select><select><option> </option><option>07/27/2026</option></select></label>)}</fieldset></div><div className="legacy-right"><fieldset><legend>Select Named Insured</legend><select value={form.namedInsured} onChange={(event) => selectInsured(event.target.value)}><option value=""> </option><option value="JAMAR WILLIAMS - 3208 MAPLE LN">JAMAR WILLIAMS - 3208 MAPLE LN</option></select></fieldset><fieldset className="operations"><legend>Description of Operations</legend><label>Default Text: <select><option> </option><option>Commercial transportation operations</option></select><button type="button">Insert</button><button type="button">Replace</button></label><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /><a href="#text-setup">Text Setup</a></fieldset><fieldset className="note-field"><legend>Note/Message <label><input type="checkbox" defaultChecked /> Print note with form</label></legend><textarea /></fieldset><fieldset><legend>Authorized Representative Signature:</legend><select><option> </option><option>Lynn Corrigan</option></select></fieldset><div className="legacy-links"><a href="#holder">Holder Detail</a><a href="#copy">Copy Holder Detail</a></div></div></div><div className="legacy-footer"><button type="submit" disabled={!isInsuredSelected || saving}>Create</button><span>Brown Brown Insurance Services</span><span>ROTAL1</span></div></form></section></div>;
+  return <div className="form-backdrop"><section className="legacy-form-window"><div className="legacy-titlebar"><span>eForms - {customer?.name || 'Customer'}</span><div><button>—</button><button>□</button><button onClick={onClose} aria-label="Close"><X size={14} /></button></div></div><div className="legacy-menu"><span>File</span><span>Edit</span><span>eForms</span><span>View</span><span>Operation</span><span>Toolbox</span><span>Help</span></div><div className="legacy-iconbar"><span>◧</span><span>▣</span><span>▱</span><span>▾</span><span>✎</span><span>▤</span><span>◉</span><span>↔</span><span>＋</span><span>−</span><span>◀</span><span>▶</span></div><form onSubmit={submit}><div className="legacy-heading"><b>Certificate of Liability</b><div><button className="legacy-create" disabled={!isInsuredSelected || saving} type="submit">{saving ? 'Saving...' : 'Create'}</button><button type="button" onClick={onClose}>Cancel</button></div></div><p className="legacy-instruction">Select which form you wish to create, as well as appropriate policies &amp; types of insurance.</p><div className="legacy-form-body"><div className="legacy-left"><fieldset><legend>Form Selection Filters</legend><label>Form: <select><option>Certificate of Liability Insurance, 25, 12/2025</option></select></label></fieldset><div className="legacy-cert-fields"><label>Certificate #: <input value={isInsuredSelected ? certificateNumber : ''} readOnly /></label><label className="assign"><input type="checkbox" defaultChecked /> Assign Number</label><label>Description: <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label></div><div className="legacy-row"><label><input type="checkbox" /> Show to Insured</label><label>Issue Date: <input type="date" value={form.issuedDate} onChange={(event) => setForm({ ...form, issuedDate: event.target.value })} /></label></div><fieldset className="insurance-fieldset"><legend>Type of Insurance</legend><div className="insurance-head"><span>Policy #</span><span>Get detail<br />based on:</span></div>{['General Liability:', 'Automobile:', 'Cargo:', 'Trailer Interchange:', 'Work Comp/Emp Liability:', 'Garage Liability:', 'Garage Keepers Liability:', 'Umbrella/Excess Liability:', 'Other:'].map((type, index) => <label className={index > 1 && index < 7 ? 'disabled-row' : ''} key={type}>{type}<select value={index < 2 && isInsuredSelected ? '02TRM068735-01' : ''} onChange={(event) => setForm({ ...form, policy: event.target.value })}><option value=""> </option><option>02TRM068735-01</option></select><select><option> </option><option>07/27/2026</option></select></label>)}</fieldset></div><div className="legacy-right"><fieldset><legend>Select Named Insured</legend><select value={form.namedInsured} onChange={(event) => selectInsured(event.target.value)}><option value=""> </option>{customer && <option value={customer.name}>{customer.name} - {customer.address}</option>}</select></fieldset><fieldset className="operations"><legend>Description of Operations</legend><label>Default Text: <select><option> </option><option>Commercial transportation operations</option></select><button type="button">Insert</button><button type="button">Replace</button></label><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /><a href="#text-setup">Text Setup</a></fieldset><fieldset className="note-field"><legend>Note/Message <label><input type="checkbox" defaultChecked /> Print note with form</label></legend><textarea /></fieldset><fieldset><legend>Authorized Representative Signature:</legend><select><option> </option><option>Lynn Corrigan</option></select></fieldset><div className="legacy-links"><button type="button">Holder Detail</button><button type="button">Copy Holder Detail</button></div></div></div><div className="legacy-footer"><button type="submit" disabled={!isInsuredSelected || saving}>Create</button><span>Brown Brown Insurance Services</span><span>ROTAL1</span></div></form></section></div>;
 }
 
 function CertificateDetail({ certificate, onClose, onPrint }: { certificate: Certificate; onClose: () => void; onPrint: () => void }) { return <div className="modal-backdrop"><section className="detail-drawer"><div className="modal-header"><div><span className="eyebrow">Certificate register</span><h2>{certificate.certificate_number}</h2></div><button onClick={onClose} aria-label="Close"><X size={19} /></button></div><div className="detail-status"><span className="pill green">{certificate.status}</span><span>Issued {new Date(certificate.issued_date).toLocaleDateString('en-US')}</span></div><div className="document-preview"><div className="document-top"><span className="document-logo">AMS<span>360</span></span><span>ACORD 25 (2016/03)</span></div><h3>CERTIFICATE OF LIABILITY INSURANCE</h3><p>This certificate is issued as a matter of information only and confers no rights upon the certificate holder.</p><div className="document-line"><b>INSURED</b><span>{certificate.insured_name}</span></div><div className="document-line"><b>CERTIFICATE HOLDER</b><span>{certificate.holder_name}</span></div><div className="document-line"><b>DESCRIPTION OF OPERATIONS</b><span>{certificate.description}</span></div><div className="document-line"><b>POLICY NUMBER</b><span>{certificate.policy_number}</span></div></div><div className="modal-footer"><button onClick={onClose}>Close</button><button className="primary-action" onClick={onPrint}><Printer size={15} /> Print / Export</button></div></section></div>; }
+
+function CustomerModal({ initial, onClose, onSaved }: { initial: Customer | null; onClose: () => void; onSaved: (form: CustomerFormState) => void }) {
+  const [form, setForm] = useState<CustomerFormState>(() => initial ? customerToFormState(initial) : { customerType: 'Customer', nameType: 'Business', firmName: '', dba: '', firstName: '', lastName: '', address: '', city: '', state: '', zip: '', phone: '', email: '', primaryExecutive: 'Lynn Corrigan', primaryRepresentative: 'House Account' });
+  const [saving, setSaving] = useState(false);
+  const displayName = form.nameType === 'Business' ? form.firmName.trim() : `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+  const canSave = displayName.length > 0 && form.address.trim().length > 0 && form.city.trim().length > 0 && form.state.trim().length > 0 && form.zip.trim().length > 0;
+
+  function update<K extends keyof CustomerFormState>(key: K, value: CustomerFormState[K]): void {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!canSave) return;
+    setSaving(true);
+    await onSaved(form);
+    setSaving(false);
+  }
+
+  return <div className="modal-backdrop"><section className="modal"><div className="modal-header"><div><span className="eyebrow">{initial ? 'Edit customer' : 'New customer'}</span><h2>{initial ? initial.name : 'Customer Setup'}</h2></div><button onClick={onClose} aria-label="Close"><X size={19} /></button></div><form onSubmit={submit}>
+    <div className="modal-body">
+    <div className="modal-section">
+      <div className="section-label"><BriefcaseBusiness size={14} /> Customer Type &amp; Name</div>
+      <div className="field-grid">
+        <label>Customer Type<select value={form.customerType} onChange={(event) => update('customerType', event.target.value as Customer['customerType'])}><option>Customer</option><option>Prospect</option><option>Suspect</option></select></label>
+        <label>Name Type<select value={form.nameType} onChange={(event) => update('nameType', event.target.value as CustomerFormState['nameType'])}><option>Business</option><option>Individual</option></select></label>
+        {form.nameType === 'Business' ? (<>
+          <label>Firm Name<input required value={form.firmName} onChange={(event) => update('firmName', event.target.value)} /></label>
+          <label>DBA<input value={form.dba} onChange={(event) => update('dba', event.target.value)} /></label>
+        </>) : (<>
+          <label>First Name<input required value={form.firstName} onChange={(event) => update('firstName', event.target.value)} /></label>
+          <label>Last Name<input required value={form.lastName} onChange={(event) => update('lastName', event.target.value)} /></label>
+        </>)}
+      </div>
+    </div>
+    <div className="modal-section">
+      <div className="section-label"><Link2 size={14} /> Contact &amp; Address</div>
+      <div className="field-grid">
+        <label>Phone<input value={form.phone} onChange={(event) => update('phone', event.target.value)} /></label>
+        <label>Email<input type="email" value={form.email} onChange={(event) => update('email', event.target.value)} /></label>
+        <label className="full">Address<input required value={form.address} onChange={(event) => update('address', event.target.value)} /></label>
+        <label>City<input required value={form.city} onChange={(event) => update('city', event.target.value)} /></label>
+        <label>State<input required maxLength={2} value={form.state} onChange={(event) => update('state', event.target.value.toUpperCase())} /></label>
+        <label>Zip<input required value={form.zip} onChange={(event) => update('zip', event.target.value)} /></label>
+      </div>
+    </div>
+    <div className="modal-section">
+      <div className="section-label"><Gauge size={14} /> Agency Personnel</div>
+      <div className="field-grid">
+        <label>Primary Executive<input value={form.primaryExecutive} onChange={(event) => update('primaryExecutive', event.target.value)} /></label>
+        <label>Primary Representative<input value={form.primaryRepresentative} onChange={(event) => update('primaryRepresentative', event.target.value)} /></label>
+      </div>
+      <div className="notice"><ShieldCheck size={14} /> This becomes the policy Named Insured and appears on invoices and certificates.</div>
+    </div>
+    </div>
+    <div className="modal-footer"><button type="button" onClick={onClose}>Cancel</button><button type="submit" className="primary-action" disabled={!canSave || saving}>{saving ? 'Saving...' : initial ? 'Save Changes' : 'Create Customer'}</button></div>
+  </form></section></div>;
+}
 
 export default App;
