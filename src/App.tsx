@@ -23,6 +23,9 @@ import {
   Zap,
 } from 'lucide-react';
 import { Acord125Modal, Acord126Modal, Acord127Modal, Acord130Modal, Acord131Modal, Acord140Modal, type AcordSubmission } from './acordForms';
+import { fillAcordForm, downloadPdf } from './lib/acordFill';
+import { AGENCY } from './lib/acordSchema';
+import type { AcordValues } from './lib/acordTaxonomy';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -376,7 +379,7 @@ function App() {
 
   function handleAcordFormSubmitted(submission: AcordSubmission): void {
     setOpenAcordForm(null);
-    notify(`${submission.form} saved for ${submission.name}`);
+    notify(`${submission.form} — ${submission.name}${submission.detail ? ` (${submission.detail})` : ''}`);
   }
 
   return (
@@ -425,15 +428,15 @@ function App() {
       {isEformsOpen && <EformsManager customer={selectedCustomer} tab={eformsTab} onTabChange={setEformsTab} onClose={() => setIsEformsOpen(false)} onNewCertificate={() => setIsModalOpen(true)} onOpenAcordForm={setOpenAcordForm} />}
       {isModalOpen && <CertificateModal customer={selectedCustomer} onClose={() => setIsModalOpen(false)} onSaved={handleCertificateSaved} />}
       {isCustomerModalOpen && <CustomerModal initial={editingCustomer} onClose={() => { setIsCustomerModalOpen(false); setEditingCustomer(null); }} onSaved={handleCustomerSaved} />}
-      {selectedCertificate && <CertificateDetail certificate={selectedCertificate} customer={selectedCustomer} holders={holdersFor(selectedCertificate.id)} onClose={() => setSelectedCertificate(null)} onPrint={() => notify('Certificate is ready to print')} onManageHolders={() => { setHolderManagerCertId(selectedCertificate.id); setSelectedCertificate(null); }} />}
+      {selectedCertificate && <CertificateDetail certificate={selectedCertificate} customer={selectedCustomer} holders={holdersFor(selectedCertificate.id)} onClose={() => setSelectedCertificate(null)} onNotify={notify} onManageHolders={() => { setHolderManagerCertId(selectedCertificate.id); setSelectedCertificate(null); }} />}
       {holderManagerCertId && <HolderManagerModal certificateNumber={certificates.find((certificate) => certificate.id === holderManagerCertId)?.certificate_number || ''} holders={holdersFor(holderManagerCertId)} onClose={() => setHolderManagerCertId(null)} onSaved={(holders) => handleHoldersSaved(holderManagerCertId, holders)} />}
       {isEndorsementModalOpen && <EndorsementModal onClose={() => setIsEndorsementModalOpen(false)} onSaved={handleEndorsementSaved} />}
-      {openAcordForm === 'acord-125' && <Acord125Modal onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
-      {openAcordForm === 'acord-126' && <Acord126Modal onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
-      {openAcordForm === 'acord-127' && <Acord127Modal onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
-      {openAcordForm === 'acord-130' && <Acord130Modal onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
-      {openAcordForm === 'acord-131' && <Acord131Modal onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
-      {openAcordForm === 'acord-140' && <Acord140Modal onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
+      {openAcordForm === 'acord-125' && <Acord125Modal customer={selectedCustomer} onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
+      {openAcordForm === 'acord-126' && <Acord126Modal customer={selectedCustomer} onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
+      {openAcordForm === 'acord-127' && <Acord127Modal customer={selectedCustomer} onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
+      {openAcordForm === 'acord-130' && <Acord130Modal customer={selectedCustomer} onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
+      {openAcordForm === 'acord-131' && <Acord131Modal customer={selectedCustomer} onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
+      {openAcordForm === 'acord-140' && <Acord140Modal customer={selectedCustomer} onClose={() => setOpenAcordForm(null)} onSubmit={handleAcordFormSubmitted} />}
       {toast && <div className="toast"><ShieldCheck size={17} /> {toast}</div>}
     </div>
   );
@@ -546,9 +549,41 @@ function CertificateModal({ customer, onClose, onSaved }: { customer: Customer |
   return <div className="form-backdrop"><section className="legacy-form-window"><div className="legacy-titlebar"><span>eForms - {customer?.name || 'Customer'}</span><div><button title="Minimize">—</button><button title="Maximize">□</button><button onClick={onClose} aria-label="Close" title="Close without saving"><X size={14} /></button></div></div><div className="legacy-menu"><span title="File menu">File</span><span title="Edit menu">Edit</span><span title="eForms menu">eForms</span><span title="View menu">View</span><span title="Operation menu">Operation</span><span title="Toolbox menu">Toolbox</span><span title="Help menu">Help</span></div><div className="legacy-iconbar"><span title="New">◧</span><span title="Open">▣</span><span title="Save">▱</span><span title="Save As">▾</span><span title="Edit form">✎</span><span title="Print">▤</span><span title="Export">◉</span><span title="Link">↔</span><span title="Zoom in">＋</span><span title="Zoom out">−</span><span title="Previous">◀</span><span title="Next">▶</span></div><form onSubmit={submit}><div className="legacy-heading"><b>Certificate of Liability</b><div><button className="legacy-create" disabled={!isInsuredSelected || saving} type="submit" title="Create this certificate and add it to the register">{saving ? 'Saving...' : 'Create'}</button><button type="button" onClick={onClose} title="Discard this form">Cancel</button></div></div><p className="legacy-instruction">Select which form you wish to create, as well as appropriate policies &amp; types of insurance.</p><div className="legacy-form-body"><div className="legacy-left"><fieldset><legend title="The ACORD form template used for this certificate">Form Selection Filters</legend><label>Form: <select title="Certificate form version"><option>Certificate of Liability Insurance, 25, 2016/03</option></select></label></fieldset><div className="legacy-cert-fields"><label>Certificate #: <input value={isInsuredSelected ? certificateNumber : ''} readOnly title="Auto-assigned certificate number: CL + issue date + sequence" /></label><label className="assign" title="Uncheck to enter a certificate number manually"><input type="checkbox" defaultChecked /> Assign Number</label><label>Description: <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} title="Short description to identify this certificate in the register" /></label></div><div className="legacy-row"><label title="Make this certificate visible in the insured's client portal"><input type="checkbox" /> Show to Insured</label><label>Issue Date: <input type="date" value={form.issuedDate} onChange={(event) => setForm({ ...form, issuedDate: event.target.value })} title="Date this certificate is issued" /></label></div><fieldset className="insurance-fieldset"><legend title="Select which coverages appear on this certificate">Type of Insurance</legend><div className="insurance-head"><span>Policy #</span><span>Get detail<br />based on:</span></div>{['General Liability:', 'Automobile:', 'Cargo:', 'Trailer Interchange:', 'Work Comp/Emp Liability:', 'Garage Liability:', 'Garage Keepers Liability:', 'Umbrella/Excess Liability:', 'Other:'].map((type, index) => <label className={index > 1 && index < 7 ? 'disabled-row' : ''} key={type} title={index > 1 && index < 7 ? 'Not applicable to this customer’s policy' : `Include ${type.replace(':', '')} coverage on this certificate`}>{type}<select value={index < 2 && isInsuredSelected ? '07CPK455190-01' : ''} onChange={(event) => setForm({ ...form, policy: event.target.value })}><option value=""> </option><option>07CPK455190-01</option></select><select><option> </option><option>07/27/2026</option></select></label>)}</fieldset></div><div className="legacy-right"><fieldset><legend title="The customer this certificate is issued for">Select Named Insured</legend><select value={form.namedInsured} onChange={(event) => selectInsured(event.target.value)} title="Choose the named insured for this certificate"><option value=""> </option>{customer && <option value={customer.name}>{customer.name} - {customer.address}</option>}</select></fieldset><fieldset className="operations"><legend title="Free text describing operations, locations, or vehicles covered">Description of Operations</legend><label>Default Text: <select title="Insert a saved boilerplate description"><option> </option><option>Commercial transportation operations</option></select><button type="button" title="Insert the selected default text at the cursor">Insert</button><button type="button" title="Replace all text with the selected default text">Replace</button></label><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} title="Description of operations, locations, or vehicles" /><a href="#text-setup" title="Manage saved default text snippets">Text Setup</a></fieldset><fieldset className="note-field"><legend>Note/Message <label title="Print this note on the certificate"><input type="checkbox" defaultChecked /> Print note with form</label></legend><textarea title="Internal note or message to print with the form" /></fieldset><fieldset><legend title="The licensed employee whose signature appears on the certificate">Authorized Representative Signature:</legend><select title="Choose a signature on file"><option> </option><option>Alex Ramirez</option></select></fieldset><div className="legacy-links"><button type="button" title="Add or edit certificate holders after this certificate is created">Holder Detail</button><button type="button" title="Copy holder details from another certificate">Copy Holder Detail</button></div></div></div><div className="legacy-footer"><button type="submit" disabled={!isInsuredSelected || saving} title="Create this certificate">Create</button><span>Meridian Coverage Group</span><span>DEMOU1</span></div></form></section></div>;
 }
 
-function CertificateDetail({ certificate, customer, holders, onClose, onPrint, onManageHolders }: { certificate: Certificate; customer: Customer | null; holders: CertificateHolder[]; onClose: () => void; onPrint: () => void; onManageHolders: () => void }) {
+function buildAcord25Values(certificate: Certificate, customer: Customer | null, holder: CertificateHolder | null): AcordValues {
+  return {
+    formDate: new Date(certificate.issued_date).toLocaleDateString('en-US'),
+    certNumber: certificate.certificate_number,
+    producerName: AGENCY.name, producerStreet: AGENCY.street, producerCity: AGENCY.city, producerState: AGENCY.state, producerZip: AGENCY.zip,
+    producerContact: AGENCY.contact, producerPhone: AGENCY.phone, producerEmail: AGENCY.email, signature: AGENCY.signature,
+    namedInsured: customer?.name || certificate.insured_name, insStreet: customer?.address || '', insCity: customer?.city || '', insState: customer?.state || '', insZip: customer?.zip || '',
+    insurerA: 'Meridian National Insurance Company', insurerAnaic: '30045',
+    policyNumber: certificate.policy_number, effectiveDate: '03/22/2026', expirationDate: '03/22/2027',
+    glEachOcc: '1,000,000', glGenAgg: '2,000,000', glProducts: '2,000,000', glPersonalAdv: '1,000,000', glFireDamage: '100,000', glMedExp: '5,000',
+    autoCombinedLimit: '1,000,000',
+    operations: certificate.description,
+    holderName: holder?.name || '', holderStreet: holder?.address || '', holderCity: holder?.city || '', holderState: holder?.state || '', holderZip: holder?.zip || '',
+  };
+}
+
+function CertificateDetail({ certificate, customer, holders, onClose, onNotify, onManageHolders }: { certificate: Certificate; customer: Customer | null; holders: CertificateHolder[]; onClose: () => void; onNotify: (message: string) => void; onManageHolders: () => void }) {
   const holder = holders[0] || null;
   const [effDate, expDate] = ['03/22/2026', '03/22/2027'];
+  const [generating, setGenerating] = useState(false);
+
+  async function handleExport(): Promise<void> {
+    setGenerating(true);
+    try {
+      const values = buildAcord25Values(certificate, customer, holder);
+      const { bytes, wrote, failed } = await fillAcordForm('25', values);
+      downloadPdf(bytes, `ACORD-25-${certificate.certificate_number}.pdf`);
+      onNotify(failed.length ? `ACORD 25 downloaded — ${wrote} fields filled, ${failed.length} skipped` : `ACORD 25 downloaded — ${wrote} fields filled`);
+    } catch (error) {
+      onNotify(error instanceof Error ? `Could not generate PDF: ${error.message}` : 'Could not generate PDF');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   return <div className="modal-backdrop"><section className="acord-drawer"><div className="modal-header"><div><span className="eyebrow">Certificate register</span><h2>{certificate.certificate_number}</h2></div><button onClick={onClose} aria-label="Close" title="Close this preview"><X size={19} /></button></div><div className="detail-status"><span className="pill green" title="Certificate status">{certificate.status}</span><span title="Date this certificate was issued">Issued {new Date(certificate.issued_date).toLocaleDateString('en-US')}</span><button className="link-button" onClick={onManageHolders} title="Add or edit who this certificate names as holder">Manage Holders</button></div>
     <div className="acord-body">
       <div className="acord-topline" title="Standard ACORD 25 Certificate of Liability Insurance form"><span className="acord-logo">ACORD</span><h3>CERTIFICATE OF LIABILITY INSURANCE</h3><span className="acord-date-box">DATE (MM/DD/YYYY)<br /><b>{new Date(certificate.issued_date).toLocaleDateString('en-US')}</b></span></div>
@@ -577,7 +612,7 @@ function CertificateDetail({ certificate, customer, holders, onClose, onPrint, o
       <div className="acord-signature" title="Signature of the agency's authorized representative"><span>AUTHORIZED REPRESENTATIVE</span><span className="acord-sig-line">Alex Ramirez</span></div>
       <div className="acord-footer"><span>ACORD 25 (2016/03)</span><span>© 1988-2015 ACORD CORPORATION. All rights reserved. The ACORD name and logo are registered marks of ACORD.</span></div>
     </div>
-    <div className="modal-footer"><button onClick={onClose} title="Close this preview">Close</button><button className="primary-action" onClick={onPrint} title="Print or export this certificate as a PDF"><Printer size={15} /> Print / Export</button></div>
+    <div className="modal-footer"><button onClick={onClose} title="Close this preview">Close</button><button className="primary-action" onClick={handleExport} disabled={generating} title="Fill and download the real ACORD 25 PDF"><Printer size={15} /> {generating ? 'Generating…' : 'Print / Export'}</button></div>
   </section></div>;
 }
 
