@@ -169,3 +169,23 @@ tbody tr:hover { background: #fff7f1; }
 .holder-matrix-head { display: grid; grid-template-columns: 130px 1fr 1fr; font-size: 9px; color: #6a7c85; font-weight: 700; padding: 2px 0; }
 .holder-matrix-row { display: grid; grid-template-columns: 130px 1fr 1fr; align-items: center; padding: 3px 0; border-top: 1px solid #e5eaec; font-size: 10px; }
 .holder-matrix-row label { display: inline-flex; align-items: center; gap: 3px; margin-right: 10px; min-height: auto; }
+
+.acord-app-modal.modal { width: min(920px, 100%); }
+.acord-app-modal .modal-header h2 { font-size: 17px; }
+.acord-app-subtitle { font-size: 10px; color: #7d8b92; margin-top: -4px; }
+.acord-section-note { font-size: 10px; color: #7d8b92; margin-bottom: 10px; }
+.app-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 4px; }
+.app-table th { text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: #7d8b92; padding: 5px 6px; border-bottom: 1px solid #dbe3e6; }
+.app-table td { padding: 3px 6px; border-bottom: 1px solid #eef1f2; }
+.app-table input, .app-table select { width: 100%; border: 1px solid #bdcbd0; border-radius: 3px; padding: 5px 6px; font-size: 11px; background: white; }
+.checkbox-group { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 10px; }
+.checkbox-group label { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #3a4a53; font-weight: 400; }
+.yn-grid { border: 1px solid #dbe3e6; border-radius: 5px; overflow: hidden; margin-bottom: 10px; }
+.yn-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 10px; font-size: 11px; color: #3a4a53; border-top: 1px solid #eef1f2; }
+.yn-row:first-child { border-top: 0; }
+.yn-row:nth-child(odd) { background: #fbfcfc; }
+.yn-toggle { display: flex; gap: 10px; flex-shrink: 0; }
+.yn-toggle label { display: flex; align-items: center; gap: 3px; font-size: 11px; }
+.lob-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 18px; margin-bottom: 10px; }
+.lob-grid label { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #3a4a53; }
+.lob-grid input[type="text"] { width: 80px; border: 1px solid #bdcbd0; border-radius: 3px; padding: 3px 5px; font-size: 10px; margin-left: auto; }
