@@ -14,6 +14,9 @@ create schema if not exists private;
 revoke all on schema private from public;
 revoke all on schema private from anon;
 grant usage on schema private to authenticated;
+-- Functions are executable by PUBLIC by default in Postgres; turn that off
+-- for the private schema. Each helper is granted explicitly in 0500.
+alter default privileges in schema private revoke execute on functions from public;
 
 -- Defense in depth: anonymous users get no table privileges at all on
 -- anything created in public from now on. RLS is still enabled everywhere.
